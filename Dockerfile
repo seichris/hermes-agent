@@ -19,8 +19,18 @@ RUN python -m venv "$VIRTUAL_ENV" \
 WORKDIR /app
 COPY . .
 
-# Hermes needs the mini-swe-agent submodule for terminal execution.
-RUN test -d mini-swe-agent || (echo "mini-swe-agent submodule missing; enable Git submodules in Coolify" && exit 1) \
+ARG MINI_SWE_AGENT_REPO=https://github.com/SWE-agent/mini-swe-agent
+ARG MINI_SWE_AGENT_REF=07aa6a738556e44b30d7b5c3bbd5063dac871d25
+
+# Hermes needs the mini-swe-agent submodule contents for terminal execution.
+# Some deploy platforms clone the repo without hydrating submodules, leaving an
+# empty placeholder directory behind. If that happens, fetch the pinned commit.
+RUN if [ ! -f mini-swe-agent/pyproject.toml ]; then \
+        echo "mini-swe-agent submodule missing; cloning pinned fallback" >&2; \
+        rm -rf mini-swe-agent; \
+        git clone "$MINI_SWE_AGENT_REPO" mini-swe-agent; \
+        git -C mini-swe-agent checkout "$MINI_SWE_AGENT_REF"; \
+    fi \
     && pip install -e ".[messaging,cron,cli,pty,mcp]" \
     && pip install -e "./mini-swe-agent"
 
