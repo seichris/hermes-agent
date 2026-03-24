@@ -25,7 +25,7 @@ fal-client
 
 # mini-swe-agent dependencies (for terminal tool)
 # Note: Install mini-swe-agent itself with: pip install -e ./mini-swe-agent
-litellm>=1.75.5
+litellm @ git+https://github.com/BerriAI/litellm.git@9343aeefca37aa49a6ea54397d7615adae5c72c9
 typer
 platformdirs
 

@@ -33,7 +33,7 @@ dependencies = [
   "edge-tts",
   "faster-whisper>=1.0.0",
   # mini-swe-agent deps (terminal tool)
-  "litellm>=1.75.5",
+  "litellm @ git+https://github.com/BerriAI/litellm.git@9343aeefca37aa49a6ea54397d7615adae5c72c9",
   "typer",
   "platformdirs",
   # Skills Hub (GitHub App JWT auth — optional, only needed for bot identity)
