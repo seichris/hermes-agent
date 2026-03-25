@@ -43,7 +43,7 @@ services:
       - sh
       - -lc
       - |
-        /opt/venv/bin/hermes gateway -v &
+        /opt/venv/bin/hermes gateway &
         pid=$$!
         if [ "${API_SERVER_DIAG_ON_START:-false}" = "true" ]; then
           sleep "${API_SERVER_DIAG_DELAY:-10}"
