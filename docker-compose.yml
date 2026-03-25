@@ -43,11 +43,11 @@ services:
       - sh
       - -lc
       - |
-        hermes gateway -v &
+        /opt/venv/bin/hermes gateway -v &
         pid=$$!
         if [ "${API_SERVER_DIAG_ON_START:-false}" = "true" ]; then
           sleep "${API_SERVER_DIAG_DELAY:-10}"
-          python -c '
+          /opt/venv/bin/python - <<'PY'
           import os
           import socket
           import traceback
@@ -78,7 +78,7 @@ services:
               except Exception as exc:
                   print(f"API_SERVER_HTTP_ERROR: {exc!r}")
                   traceback.print_exc()
-          '
+          PY
         fi
         wait "$$pid"
 
