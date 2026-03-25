@@ -15,6 +15,8 @@ import time
 logger = logging.getLogger(__name__)
 
 _TELEGRAM_TOPIC_TARGET_RE = re.compile(r"^\s*(-?\d+)(?::(\d+))?\s*$")
+_SLACK_MENTION_RE = re.compile(r"^<\#([CGDU][A-Z0-9]+)(?:\|[^>]+)?>$")
+_SLACK_CHANNEL_ID_RE = re.compile(r"^[CGDU][A-Z0-9]+$")
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".3gp"}
 _AUDIO_EXTS = {".ogg", ".opus", ".mp3", ".wav", ".m4a"}
@@ -41,7 +43,7 @@ SEND_MESSAGE_SCHEMA = {
             },
             "target": {
                 "type": "string",
-                "description": "Delivery target. Format: 'platform' (uses home channel), 'platform:#channel-name', 'platform:chat_id', or Telegram topic 'telegram:chat_id:thread_id'. Examples: 'telegram', 'telegram:-1001234567890:17585', 'discord:#bot-home', 'slack:#engineering', 'signal:+15551234567'"
+                "description": "Delivery target. Format: 'platform' (uses home channel), 'platform:#channel-name', 'platform:chat_id', or Telegram topic 'telegram:chat_id:thread_id'. Slack also accepts raw channel IDs like 'slack:C0AD2A7C4G1' and Slack mentions like 'slack:#agents-updates'. Examples: 'telegram', 'telegram:-1001234567890:17585', 'discord:#bot-home', 'slack:#engineering', 'signal:+155****4567'"
             },
             "message": {
                 "type": "string",
@@ -194,6 +196,18 @@ def _handle_send(args):
 
 def _parse_target_ref(platform_name: str, target_ref: str):
     """Parse a tool target into chat_id/thread_id and whether it is explicit."""
+    target_ref = target_ref.strip()
+
+    if platform_name == "slack":
+        mention = _SLACK_MENTION_RE.fullmatch(target_ref)
+        if mention:
+            target_ref = mention.group(1)
+        topic_suffix = re.fullmatch(r"^([CGDU][A-Z0-9]+)\s*/\s*topic\s+\d+$", target_ref, re.IGNORECASE)
+        if topic_suffix:
+            target_ref = topic_suffix.group(1)
+        if _SLACK_CHANNEL_ID_RE.fullmatch(target_ref):
+            return target_ref, None, True
+
     if platform_name == "telegram":
         match = _TELEGRAM_TOPIC_TARGET_RE.fullmatch(target_ref)
         if match:
