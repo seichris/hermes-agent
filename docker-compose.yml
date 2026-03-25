@@ -47,38 +47,25 @@ services:
         pid=$$!
         if [ "${API_SERVER_DIAG_ON_START:-false}" = "true" ]; then
           sleep "${API_SERVER_DIAG_DELAY:-10}"
-          /opt/venv/bin/python - <<'PY'
-          import os
-          import socket
-          import traceback
-          import urllib.request
-
-          host = "127.0.0.1"
-          port = int(os.getenv("API_SERVER_PORT", "8642"))
-          key = os.getenv("API_SERVER_KEY", "")
-          print(f"API_SERVER_DIAG host={host} port={port}")
-
-          try:
-              with socket.create_connection((host, port), timeout=5):
-                  print("API_SERVER_SOCKET_OK")
-          except Exception as exc:
-              print(f"API_SERVER_SOCKET_ERROR: {exc!r}")
-
-          if not key:
-              print("API_SERVER_HTTP_SKIPPED: missing API_SERVER_KEY")
-          else:
-              try:
-                  req = urllib.request.Request(
-                      f"http://{host}:{port}/v1/models",
-                      headers={"Authorization": f"Bearer {key}"},
-                  )
-                  with urllib.request.urlopen(req, timeout=10) as resp:
-                      print(f"API_SERVER_HTTP_STATUS: {resp.status}")
-                      print(resp.read().decode())
-              except Exception as exc:
-                  print(f"API_SERVER_HTTP_ERROR: {exc!r}")
-                  traceback.print_exc()
-          PY
+          host="127.0.0.1"
+          port="${API_SERVER_PORT:-8642}"
+          echo "API_SERVER_DIAG host=$$host port=$$port"
+          if [ -z "${API_SERVER_KEY:-}" ]; then
+            echo "API_SERVER_HTTP_SKIPPED: missing API_SERVER_KEY"
+          else
+            headers="/tmp/api-server-headers.$$"
+            body="/tmp/api-server-body.$$"
+            if curl -sS -D "$$headers" -o "$$body" \
+              -H "Authorization: Bearer ${API_SERVER_KEY}" \
+              "http://$$host:$$port/v1/models"; then
+              status=$$(awk 'toupper($$1) ~ /^HTTP/ {code=$$2} END {print code}' "$$headers")
+              echo "API_SERVER_HTTP_STATUS: $$status"
+              cat "$$body"
+            else
+              echo "API_SERVER_HTTP_ERROR"
+            fi
+            rm -f "$$headers" "$$body"
+          fi
         fi
         wait "$$pid"
 
