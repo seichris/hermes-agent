@@ -1,20 +1,45 @@
-FROM debian:13.4
+FROM python:3.11-slim
 
-RUN apt-get update
-RUN apt-get install -y nodejs npm python3 python3-pip ripgrep ffmpeg gcc python3-dev libffi-dev
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HERMES_HOME=/data/hermes \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
-COPY . /opt/hermes
-WORKDIR /opt/hermes
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash ca-certificates curl git build-essential python3-dev libffi-dev \
+    nodejs npm ripgrep ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip install -e ".[all]" --break-system-packages
-RUN npm install
-RUN npx playwright install --with-deps chromium
-WORKDIR /opt/hermes/scripts/whatsapp-bridge
-RUN npm install
+RUN python -m venv "$VIRTUAL_ENV" \
+    && "$VIRTUAL_ENV/bin/pip" install --upgrade pip setuptools wheel
 
-WORKDIR /opt/hermes
-RUN chmod +x /opt/hermes/docker/entrypoint.sh
+WORKDIR /app
+COPY . .
 
-ENV HERMES_HOME=/opt/data
-VOLUME [ "/opt/data" ]
-ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
+ARG MINI_SWE_AGENT_REPO=https://github.com/SWE-agent/mini-swe-agent
+ARG MINI_SWE_AGENT_REF=07aa6a738556e44b30d7b5c3bbd5063dac871d25
+
+# Hermes needs the mini-swe-agent submodule contents for terminal execution.
+# Some deploy platforms clone the repo without hydrating submodules, leaving an
+# empty placeholder directory behind. If that happens, fetch the pinned commit.
+RUN if [ ! -f mini-swe-agent/pyproject.toml ]; then \
+        echo "mini-swe-agent submodule missing; cloning pinned fallback" >&2; \
+        rm -rf mini-swe-agent; \
+        git clone "$MINI_SWE_AGENT_REPO" mini-swe-agent; \
+        git -C mini-swe-agent checkout "$MINI_SWE_AGENT_REF"; \
+    fi \
+    && pip install -e ".[messaging,cron,cli,pty,mcp]" \
+    && pip install -e "./mini-swe-agent" \
+    && npm install \
+    && npx playwright install --with-deps chromium \
+    && npm --prefix scripts/whatsapp-bridge install
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+VOLUME ["/data/hermes"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["hermes", "gateway"]
