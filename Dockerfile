@@ -10,7 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash ca-certificates curl git build-essential python3-dev libffi-dev \
-    ripgrep ffmpeg \
+    nodejs npm ripgrep ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv "$VIRTUAL_ENV" \
@@ -32,10 +32,14 @@ RUN if [ ! -f mini-swe-agent/pyproject.toml ]; then \
         git -C mini-swe-agent checkout "$MINI_SWE_AGENT_REF"; \
     fi \
     && pip install -e ".[messaging,cron,cli,pty,mcp]" \
-    && pip install -e "./mini-swe-agent"
+    && pip install -e "./mini-swe-agent" \
+    && npm install \
+    && npx playwright install --with-deps chromium \
+    && npm --prefix scripts/whatsapp-bridge install
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+VOLUME ["/data/hermes"]
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["hermes", "gateway"]

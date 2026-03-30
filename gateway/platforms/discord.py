@@ -486,6 +486,17 @@ class DiscordAdapter(BasePlatformAdapter):
             return False
         
         try:
+            # Acquire scoped lock to prevent duplicate bot token usage
+            from gateway.status import acquire_scoped_lock
+            self._token_lock_identity = self.config.token
+            acquired, existing = acquire_scoped_lock('discord-bot-token', self._token_lock_identity, metadata={'platform': 'discord'})
+            if not acquired:
+                owner_pid = existing.get('pid') if isinstance(existing, dict) else None
+                message = f'Discord bot token already in use' + (f' (PID {owner_pid})' if owner_pid else '') + '. Stop the other gateway first.'
+                logger.error('[%s] %s', self.name, message)
+                self._set_fatal_error('discord_token_lock', message, retryable=False)
+                return False
+
             # Set up intents -- members intent needed for username-to-ID resolution
             intents = Intents.default()
             intents.message_content = True
@@ -638,6 +649,16 @@ class DiscordAdapter(BasePlatformAdapter):
         self._running = False
         self._client = None
         self._ready_event.clear()
+
+        # Release the token lock
+        try:
+            from gateway.status import release_scoped_lock
+            if getattr(self, '_token_lock_identity', None):
+                release_scoped_lock('discord-bot-token', self._token_lock_identity)
+                self._token_lock_identity = None
+        except Exception:
+            pass
+
         logger.info("[%s] Disconnected", self.name)
     
     async def send(
@@ -1429,15 +1450,23 @@ class DiscordAdapter(BasePlatformAdapter):
         command_text: str,
         followup_msg: str | None = None,
     ) -> None:
-        """Common handler for simple slash commands that dispatch a command string."""
+        """Common handler for simple slash commands that dispatch a command string.
+
+        Defers the interaction (shows "thinking..."), dispatches the command,
+        then cleans up the deferred response.  If *followup_msg* is provided
+        the "thinking..." indicator is replaced with that text; otherwise it
+        is deleted so the channel isn't cluttered.
+        """
         await interaction.response.defer(ephemeral=True)
         event = self._build_slash_event(interaction, command_text)
         await self.handle_message(event)
-        if followup_msg:
-            try:
-                await interaction.followup.send(followup_msg, ephemeral=True)
-            except Exception as e:
-                logger.debug("Discord followup failed: %s", e)
+        try:
+            if followup_msg:
+                await interaction.edit_original_response(content=followup_msg)
+            else:
+                await interaction.delete_original_response()
+        except Exception as e:
+            logger.debug("Discord interaction cleanup failed: %s", e)
 
     def _register_slash_commands(self) -> None:
         """Register Discord slash commands on the command tree."""
@@ -1462,9 +1491,7 @@ class DiscordAdapter(BasePlatformAdapter):
         @tree.command(name="reasoning", description="Show or change reasoning effort")
         @discord.app_commands.describe(effort="Reasoning effort: xhigh, high, medium, low, minimal, or none.")
         async def slash_reasoning(interaction: discord.Interaction, effort: str = ""):
-            await interaction.response.defer(ephemeral=True)
-            event = self._build_slash_event(interaction, f"/reasoning {effort}".strip())
-            await self.handle_message(event)
+            await self._run_simple_slash(interaction, f"/reasoning {effort}".strip())
 
         @tree.command(name="personality", description="Set a personality")
         @discord.app_commands.describe(name="Personality name. Leave empty to list available.")
@@ -1537,9 +1564,7 @@ class DiscordAdapter(BasePlatformAdapter):
             discord.app_commands.Choice(name="status — show current mode", value="status"),
         ])
         async def slash_voice(interaction: discord.Interaction, mode: str = ""):
-            await interaction.response.defer(ephemeral=True)
-            event = self._build_slash_event(interaction, f"/voice {mode}".strip())
-            await self.handle_message(event)
+            await self._run_simple_slash(interaction, f"/voice {mode}".strip())
 
         @tree.command(name="update", description="Update Hermes Agent to the latest version")
         async def slash_update(interaction: discord.Interaction):

@@ -384,32 +384,38 @@ See [ACP Editor Integration](../user-guide/features/acp.md) and [ACP Internals](
 hermes mcp <subcommand>
 ```
 
-Manage MCP (Model Context Protocol) server configurations.
+Manage MCP (Model Context Protocol) server configurations and run Hermes as an MCP server.
 
 | Subcommand | Description |
 |------------|-------------|
+| `serve [-v\|--verbose]` | Run Hermes as an MCP server — expose conversations to other agents. |
 | `add <name> [--url URL] [--command CMD] [--args ...] [--auth oauth\|header]` | Add an MCP server with automatic tool discovery. |
 | `remove <name>` (alias: `rm`) | Remove an MCP server from config. |
 | `list` (alias: `ls`) | List configured MCP servers. |
 | `test <name>` | Test connection to an MCP server. |
 | `configure <name>` (alias: `config`) | Toggle tool selection for a server. |
 
-See [MCP Config Reference](./mcp-config-reference.md) and [Use MCP with Hermes](../guides/use-mcp-with-hermes.md).
+See [MCP Config Reference](./mcp-config-reference.md), [Use MCP with Hermes](../guides/use-mcp-with-hermes.md), and [MCP Server Mode](../user-guide/features/mcp.md#running-hermes-as-an-mcp-server).
 
 ## `hermes plugins`
 
 ```bash
-hermes plugins <subcommand>
+hermes plugins [subcommand]
 ```
 
-Manage Hermes Agent plugins.
+Manage Hermes Agent plugins. Running `hermes plugins` with no subcommand launches an interactive curses checklist to enable/disable installed plugins.
 
 | Subcommand | Description |
 |------------|-------------|
+| *(none)* | Interactive toggle UI — enable/disable plugins with arrow keys and space. |
 | `install <identifier> [--force]` | Install a plugin from a Git URL or `owner/repo`. |
 | `update <name>` | Pull latest changes for an installed plugin. |
 | `remove <name>` (aliases: `rm`, `uninstall`) | Remove an installed plugin. |
-| `list` (alias: `ls`) | List installed plugins. |
+| `enable <name>` | Enable a disabled plugin. |
+| `disable <name>` | Disable a plugin without removing it. |
+| `list` (alias: `ls`) | List installed plugins with enabled/disabled status. |
+
+Disabled plugins are stored in `config.yaml` under `plugins.disabled` and skipped during loading.
 
 See [Plugins](../user-guide/features/plugins.md) and [Build a Hermes Plugin](../guides/build-a-hermes-plugin.md).
 
