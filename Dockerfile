@@ -8,9 +8,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
+ARG INSTALL_BROWSER_STACK=false
+ARG INSTALL_WHATSAPP_BRIDGE=false
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash ca-certificates curl git build-essential python3-dev libffi-dev \
     ripgrep ffmpeg \
+    && if [ "$INSTALL_BROWSER_STACK" = "true" ] || [ "$INSTALL_WHATSAPP_BRIDGE" = "true" ]; then \
+         apt-get install -y --no-install-recommends nodejs npm; \
+       fi \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv "$VIRTUAL_ENV" \
@@ -32,7 +38,13 @@ RUN if [ ! -f mini-swe-agent/pyproject.toml ]; then \
         git -C mini-swe-agent checkout "$MINI_SWE_AGENT_REF"; \
     fi \
     && pip install -e ".[messaging,cron,cli,pty,mcp]" \
-    && pip install -e "./mini-swe-agent"
+    && pip install -e "./mini-swe-agent" \
+    && if [ "$INSTALL_BROWSER_STACK" = "true" ]; then \
+         npm install && npx playwright install --with-deps chromium; \
+       fi \
+    && if [ "$INSTALL_WHATSAPP_BRIDGE" = "true" ]; then \
+         npm --prefix scripts/whatsapp-bridge install; \
+       fi
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

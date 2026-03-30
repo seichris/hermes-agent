@@ -38,8 +38,7 @@ jobs:
       - name: Test image starts
         run: |
           docker run --rm \
-            -v /tmp/hermes-test:/opt/data \
-            --entrypoint /opt/hermes/docker/entrypoint.sh \
+            -v /tmp/hermes-test:/data/hermes \
             nousresearch/hermes-agent:test --help
 
       - name: Log in to Docker Hub

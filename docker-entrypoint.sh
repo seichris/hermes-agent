@@ -3,6 +3,7 @@
 set -euo pipefail
 
 : "${HERMES_HOME:=/data/hermes}"
+INSTALL_DIR=/app
 
 mkdir -p \
   "$HERMES_HOME"/cron \
@@ -17,11 +18,23 @@ mkdir -p \
   "$HERMES_HOME"/whatsapp/session
 
 if [ ! -f "$HERMES_HOME/config.yaml" ]; then
-  cp /app/cli-config.yaml.example "$HERMES_HOME/config.yaml"
+  cp "$INSTALL_DIR/cli-config.yaml.example" "$HERMES_HOME/config.yaml"
 fi
 
 if [ ! -f "$HERMES_HOME/.env" ]; then
-  touch "$HERMES_HOME/.env"
+  if [ -f "$INSTALL_DIR/.env.example" ]; then
+    cp "$INSTALL_DIR/.env.example" "$HERMES_HOME/.env"
+  else
+    touch "$HERMES_HOME/.env"
+  fi
+fi
+
+if [ ! -f "$HERMES_HOME/SOUL.md" ] && [ -f "$INSTALL_DIR/docker/SOUL.md" ]; then
+  cp "$INSTALL_DIR/docker/SOUL.md" "$HERMES_HOME/SOUL.md"
+fi
+
+if [ -d "$INSTALL_DIR/skills" ] && [ -f "$INSTALL_DIR/tools/skills_sync.py" ]; then
+  python3 "$INSTALL_DIR/tools/skills_sync.py"
 fi
 
 if [ -n "${MESSAGING_CWD:-}" ]; then
