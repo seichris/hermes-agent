@@ -14,9 +14,12 @@ ARG INSTALL_WHATSAPP_BRIDGE=false
 # Install system dependencies in one layer, clear APT cache.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        bash ca-certificates curl git build-essential python3-dev libffi-dev \
-        ripgrep ffmpeg nodejs npm python3 python3-pip gcc && \
-    rm -rf /var/lib/apt/lists/*
+    bash ca-certificates curl git build-essential python3-dev libffi-dev \
+    ripgrep ffmpeg \
+    && if [ "$INSTALL_BROWSER_STACK" = "true" ] || [ "$INSTALL_WHATSAPP_BRIDGE" = "true" ]; then \
+         apt-get install -y --no-install-recommends nodejs npm; \
+       fi \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv "$VIRTUAL_ENV" \
     && "$VIRTUAL_ENV/bin/pip" install --upgrade pip setuptools wheel
