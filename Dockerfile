@@ -11,7 +11,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 ARG INSTALL_BROWSER_STACK=false
 ARG INSTALL_WHATSAPP_BRIDGE=false
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies in one layer, clear APT cache.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     bash ca-certificates curl git build-essential python3-dev libffi-dev \
     ripgrep ffmpeg \
     && if [ "$INSTALL_BROWSER_STACK" = "true" ] || [ "$INSTALL_WHATSAPP_BRIDGE" = "true" ]; then \
