@@ -1127,6 +1127,7 @@ class GatewayRunner:
             # Set up message + fatal error handlers
             adapter.set_message_handler(self._handle_message)
             adapter.set_fatal_error_handler(self._handle_adapter_fatal_error)
+            adapter.set_session_store(self.session_store)
             
             # Try to connect
             logger.info("Connecting to %s...", platform.value)
@@ -1424,6 +1425,7 @@ class GatewayRunner:
 
                     adapter.set_message_handler(self._handle_message)
                     adapter.set_fatal_error_handler(self._handle_adapter_fatal_error)
+                    adapter.set_session_store(self.session_store)
 
                     success = await adapter.connect()
                     if success:
@@ -3244,7 +3246,7 @@ class GatewayRunner:
             old_entry = self.session_store._entries.get(session_key)
             if old_entry:
                 _flush_task = asyncio.create_task(
-                    self._async_flush_memories(old_entry.session_id, session_key)
+                    self._async_flush_memories(old_entry.session_id)
                 )
                 self._background_tasks.add(_flush_task)
                 _flush_task.add_done_callback(self._background_tasks.discard)
@@ -3252,8 +3254,24 @@ class GatewayRunner:
             logger.debug("Gateway memory flush on reset failed: %s", e)
         self._evict_cached_agent(session_key)
         
+        try:
+            from tools.env_passthrough import clear_env_passthrough
+            clear_env_passthrough()
+        except Exception:
+            pass
+
+        try:
+            from tools.credential_files import clear_credential_files
+            clear_credential_files()
+        except Exception:
+            pass
+
         # Reset the session
         new_entry = self.session_store.reset_session(session_key)
+
+        # Clear any session-scoped model override so the next agent picks up
+        # the configured default instead of the previously switched model.
+        self._session_model_overrides.pop(session_key, None)
 
         # Emit session:end hook (session is ending)
         await self.hooks.emit("session:end", {
@@ -3481,7 +3499,7 @@ class GatewayRunner:
                     cfg = yaml.safe_load(f) or {}
                 model_cfg = cfg.get("model", {})
                 if isinstance(model_cfg, dict):
-                    current_model = model_cfg.get("name", "")
+                    current_model = model_cfg.get("default", "")
                     current_provider = model_cfg.get("provider", current_provider)
                     current_base_url = model_cfg.get("base_url", "")
                 user_provs = cfg.get("providers")
@@ -3591,7 +3609,7 @@ class GatewayRunner:
                 else:
                     cfg = {}
                 model_cfg = cfg.setdefault("model", {})
-                model_cfg["name"] = result.new_model
+                model_cfg["default"] = result.new_model
                 model_cfg["provider"] = result.target_provider
                 if result.base_url:
                     model_cfg["base_url"] = result.base_url
@@ -4974,7 +4992,7 @@ class GatewayRunner:
         # Flush memories for current session before switching
         try:
             _flush_task = asyncio.create_task(
-                self._async_flush_memories(current_entry.session_id, session_key)
+                self._async_flush_memories(current_entry.session_id)
             )
             self._background_tasks.add(_flush_task)
             _flush_task.add_done_callback(self._background_tasks.discard)
