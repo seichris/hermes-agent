@@ -1347,10 +1347,9 @@ class MatrixAdapter(BasePlatformAdapter):
         self, room_id: str, event_id: str, emoji: str,
     ) -> bool:
         """Send an emoji reaction to a message in a room."""
-        import nio
-
         if not self._client:
             return False
+        import nio
         content = {
             "m.relates_to": {
                 "rel_type": "m.annotation",
@@ -1487,10 +1486,9 @@ class MatrixAdapter(BasePlatformAdapter):
         self, room_id: str, event_id: str, reason: str = "",
     ) -> bool:
         """Redact (delete) a message or event from a room."""
-        import nio
-
         if not self._client:
             return False
+        import nio
         try:
             resp = await self._client.room_redact(
                 room_id, event_id, reason=reason,
@@ -1575,10 +1573,9 @@ class MatrixAdapter(BasePlatformAdapter):
 
         Returns the room_id on success, None on failure.
         """
-        import nio
-
         if not self._client:
             return None
+        import nio
         try:
             resp = await self._client.room_create(
                 name=name or None,
@@ -1648,10 +1645,9 @@ class MatrixAdapter(BasePlatformAdapter):
         self, chat_id: str, text: str, metadata: Optional[Dict[str, Any]] = None,
     ) -> SendResult:
         """Send an emote message (/me style action)."""
-        import nio
-
         if not self._client or not text:
             return SendResult(success=False, error="No client or empty text")
+        import nio
 
         msg_content: Dict[str, Any] = {
             "msgtype": "m.emote",
@@ -1677,10 +1673,9 @@ class MatrixAdapter(BasePlatformAdapter):
         self, chat_id: str, text: str, metadata: Optional[Dict[str, Any]] = None,
     ) -> SendResult:
         """Send a notice message (bot-appropriate, non-alerting)."""
-        import nio
-
         if not self._client or not text:
             return SendResult(success=False, error="No client or empty text")
+        import nio
 
         msg_content: Dict[str, Any] = {
             "msgtype": "m.notice",

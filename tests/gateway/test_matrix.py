@@ -1450,6 +1450,7 @@ class TestMatrixEncryptedMedia:
 
     @pytest.mark.asyncio
     async def test_on_room_message_media_decrypts_encrypted_image_and_passes_local_path(self):
+        pytest.importorskip("nio.crypto.attachments")
         from nio.crypto.attachments import encrypt_attachment
 
         adapter = _make_adapter()
@@ -1518,6 +1519,7 @@ class TestMatrixEncryptedMedia:
 
     @pytest.mark.asyncio
     async def test_on_room_message_media_decrypts_encrypted_voice_and_caches_audio(self):
+        pytest.importorskip("nio.crypto.attachments")
         from nio.crypto.attachments import encrypt_attachment
 
         adapter = _make_adapter()
@@ -1587,6 +1589,7 @@ class TestMatrixEncryptedMedia:
 
     @pytest.mark.asyncio
     async def test_on_room_message_media_decrypts_encrypted_file_and_caches_document(self):
+        pytest.importorskip("nio.crypto.attachments")
         from nio.crypto.attachments import encrypt_attachment
 
         adapter = _make_adapter()

@@ -423,13 +423,14 @@ def _resolve_gateway_model(config: dict | None = None) -> str:
     back to the hardcoded default which fails when the active provider is
     openai-codex.
     """
+    env_model = os.getenv("HERMES_MODEL", "").strip()
     cfg = config if config is not None else _load_gateway_config()
     model_cfg = cfg.get("model", {})
     if isinstance(model_cfg, str):
-        return model_cfg
+        return model_cfg or env_model
     elif isinstance(model_cfg, dict):
-        return model_cfg.get("default") or model_cfg.get("model") or ""
-    return ""
+        return model_cfg.get("default") or model_cfg.get("model") or env_model
+    return env_model
 
 
 def _resolve_hermes_bin() -> Optional[list[str]]:
@@ -1773,6 +1774,9 @@ class GatewayRunner:
         6. Run agent conversation
         7. Return response
         """
+        if "_running_agents_ts" not in self.__dict__:
+            self._running_agents_ts = {}
+        hooks = getattr(self, "hooks", None)
         source = event.source
 
         # Check if user is authorized
@@ -1858,27 +1862,33 @@ class GatewayRunner:
         if _quick_key in self._running_agents and _stale_ts:
             _stale_age = time.time() - _stale_ts
             _stale_agent = self._running_agents.get(_quick_key)
-            _stale_idle = float("inf")  # assume idle if we can't check
-            _stale_detail = ""
-            if _stale_agent and hasattr(_stale_agent, "get_activity_summary"):
-                try:
-                    _sa = _stale_agent.get_activity_summary()
-                    _stale_idle = _sa.get("seconds_since_activity", float("inf"))
-                    _stale_detail = (
-                        f" | last_activity={_sa.get('last_activity_desc', 'unknown')} "
-                        f"({_stale_idle:.0f}s ago) "
-                        f"| iteration={_sa.get('api_call_count', 0)}/{_sa.get('max_iterations', 0)}"
-                    )
-                except Exception:
-                    pass
-            # Evict if: agent is idle beyond timeout, OR wall-clock age is
-            # extreme (10x timeout or 2h, whichever is larger — catches
-            # cases where the agent object was garbage-collected).
-            _wall_ttl = max(_raw_stale_timeout * 10, 7200) if _raw_stale_timeout > 0 else float("inf")
-            _should_evict = (
-                (_raw_stale_timeout > 0 and _stale_idle >= _raw_stale_timeout)
-                or _stale_age > _wall_ttl
-            )
+            if _stale_agent is _AGENT_PENDING_SENTINEL:
+                _stale_agent = None
+                _stale_idle = 0.0
+                _stale_detail = " | pending startup"
+                _should_evict = False
+            else:
+                _stale_idle = float("inf")  # assume idle if we can't check
+                _stale_detail = ""
+                if _stale_agent and hasattr(_stale_agent, "get_activity_summary"):
+                    try:
+                        _sa = _stale_agent.get_activity_summary()
+                        _stale_idle = _sa.get("seconds_since_activity", float("inf"))
+                        _stale_detail = (
+                            f" | last_activity={_sa.get('last_activity_desc', 'unknown')} "
+                            f"({_stale_idle:.0f}s ago) "
+                            f"| iteration={_sa.get('api_call_count', 0)}/{_sa.get('max_iterations', 0)}"
+                        )
+                    except Exception:
+                        pass
+                # Evict if: agent is idle beyond timeout, OR wall-clock age is
+                # extreme (10x timeout or 2h, whichever is larger — catches
+                # cases where the agent object was garbage-collected).
+                _wall_ttl = max(_raw_stale_timeout * 10, 7200) if _raw_stale_timeout > 0 else float("inf")
+                _should_evict = (
+                    (_raw_stale_timeout > 0 and _stale_idle >= _raw_stale_timeout)
+                    or _stale_age > _wall_ttl
+                )
             if _should_evict:
                 logger.warning(
                     "Evicting stale _running_agents entry for %s "
@@ -2020,8 +2030,8 @@ class GatewayRunner:
         # GATEWAY_KNOWN_COMMANDS is derived from the central COMMAND_REGISTRY
         # in hermes_cli/commands.py — no hardcoded set to maintain here.
         from hermes_cli.commands import GATEWAY_KNOWN_COMMANDS, resolve_command as _resolve_cmd
-        if command and command in GATEWAY_KNOWN_COMMANDS:
-            await self.hooks.emit(f"command:{command}", {
+        if command and command in GATEWAY_KNOWN_COMMANDS and hooks and hasattr(hooks, "emit"):
+            await hooks.emit(f"command:{command}", {
                 "platform": source.platform.value if source.platform else "",
                 "user_id": source.user_id,
                 "command": command,
@@ -3369,8 +3379,11 @@ class GatewayRunner:
         fallback.  Force-clean the session lock in all cases for safety.
         """
         source = event.source
-        session_entry = self.session_store.get_or_create_session(source)
-        session_key = session_entry.session_key
+        if hasattr(self, "session_store") and self.session_store is not None:
+            session_entry = self.session_store.get_or_create_session(source)
+            session_key = session_entry.session_key
+        else:
+            session_key = self._session_key_for_source(source)
         
         agent = self._running_agents.get(session_key)
         if agent is _AGENT_PENDING_SENTINEL:
