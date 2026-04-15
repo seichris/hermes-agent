@@ -78,6 +78,12 @@ def set_session_context(session_id: str) -> None:
     _session_context.session_id = session_id
 
 
+def clear_session_context() -> None:
+    """Clear the session ID for the current thread."""
+    if hasattr(_session_context, "session_id"):
+        delattr(_session_context, "session_id")
+
+
 
 # ---------------------------------------------------------------------------
 # Record factory — injects session_tag into every LogRecord at creation
@@ -200,7 +206,7 @@ def setup_logging(
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Read config defaults (best-effort — config may not be loaded yet).
-    cfg_level, cfg_max_size, cfg_backup = _read_logging_config()
+    cfg_level, cfg_max_size, cfg_backup = _read_logging_config(home)
 
     level_name = (log_level or cfg_level or "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
@@ -362,14 +368,18 @@ def _add_rotating_handler(
     logger.addHandler(handler)
 
 
-def _read_logging_config():
+def _read_logging_config(hermes_home: Path | None = None):
     """Best-effort read of ``logging.*`` from config.yaml.
 
     Returns ``(level, max_size_mb, backup_count)`` — any may be ``None``.
     """
     try:
         import yaml
-        config_path = get_config_path()
+        config_path = (
+            (hermes_home / "config.yaml")
+            if hermes_home is not None
+            else get_config_path()
+        )
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}

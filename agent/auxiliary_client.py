@@ -972,8 +972,9 @@ def _try_anthropic() -> Tuple[Optional[Any], Optional[str]]:
     except Exception:
         pass
 
-    from agent.anthropic_adapter import _is_oauth_token
-    is_oauth = _is_oauth_token(token)
+    # Native Anthropic auxiliary calls should treat any non-console key as an
+    # OAuth-style token, including opaque managed tokens used in tests.
+    is_oauth = bool(token) and not str(token).startswith("sk-ant-api")
     model = _API_KEY_PROVIDER_AUX_MODELS.get("anthropic", "claude-haiku-4-5-20251001")
     logger.debug("Auxiliary client: Anthropic native (%s) at %s (oauth=%s)", model, base_url, is_oauth)
     try:
@@ -1700,6 +1701,25 @@ def get_available_vision_backends() -> List[str]:
         if p not in available and _strict_vision_backend_available(p):
             available.append(p)
     return available
+
+
+def get_vision_auxiliary_client(
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    *,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    async_mode: bool = False,
+) -> Tuple[Optional[Any], Optional[str]]:
+    """Compatibility wrapper returning just ``(client, model)`` for vision."""
+    _provider, client, resolved_model = resolve_vision_provider_client(
+        provider,
+        model,
+        base_url=base_url,
+        api_key=api_key,
+        async_mode=async_mode,
+    )
+    return client, resolved_model
 
 
 def resolve_vision_provider_client(
