@@ -2405,12 +2405,11 @@ class GatewayRunner:
         # are system-generated and must skip user authorization.
         if getattr(event, "internal", False):
             pass
-        elif source.user_id is None:
-            # Messages with no user identity (Telegram service messages,
-            # channel forwards, anonymous admin actions) cannot be
-            # authorized — drop silently instead of triggering the pairing
-            # flow with a None user_id.
-            logger.debug("Ignoring message with no user_id from %s", source.platform.value)
+        elif source.user_id is None and source.chat_type == "dm":
+            # Direct messages without a sender identity cannot be paired or
+            # authorized safely, so drop them. Group/topic traffic may still
+            # be authorized by chat-level policy and should continue.
+            logger.debug("Ignoring DM with no user_id from %s", source.platform.value)
             return None
         elif not self._is_user_authorized(source):
             logger.warning("Unauthorized user: %s (%s) on %s", source.user_id, source.user_name, source.platform.value)
