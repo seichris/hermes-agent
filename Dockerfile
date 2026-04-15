@@ -1,55 +1,46 @@
-FROM python:3.11-slim
+FROM ghcr.io/astral-sh/uv:0.11.6-python3.13-trixie@sha256:b3c543b6c4f23a5f2df22866bd7857e5d304b67a564f4feab6ac22044dde719b AS uv_source
+FROM tianon/gosu:1.19-trixie@sha256:3b176695959c71e123eb390d427efc665eeb561b1540e82679c15e992006b8b9 AS gosu_source
+FROM debian:13.4
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    HERMES_HOME=/data/hermes \
-    VIRTUAL_ENV=/opt/venv \
-    PATH="/opt/venv/bin:$PATH"
+# Disable Python stdout buffering to ensure logs are printed immediately
+ENV PYTHONUNBUFFERED=1
 
-ARG INSTALL_BROWSER_STACK=false
-ARG INSTALL_WHATSAPP_BRIDGE=false
+# Store Playwright browsers outside the volume mount so the build-time
+# install survives the /opt/data volume overlay at runtime.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright
 
-# Install system dependencies in one layer, clear APT cache.
+# Install system dependencies in one layer, clear APT cache
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    bash ca-certificates curl git build-essential python3-dev libffi-dev \
-    ripgrep ffmpeg \
-    && if [ "$INSTALL_BROWSER_STACK" = "true" ] || [ "$INSTALL_WHATSAPP_BRIDGE" = "true" ]; then \
-         apt-get install -y --no-install-recommends nodejs npm; \
-       fi \
-    && rm -rf /var/lib/apt/lists/*
+        build-essential nodejs npm python3 ripgrep ffmpeg gcc python3-dev libffi-dev procps git && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN python -m venv "$VIRTUAL_ENV" \
-    && "$VIRTUAL_ENV/bin/pip" install --upgrade pip setuptools wheel
+# Non-root user for runtime; UID can be overridden via HERMES_UID at runtime
+RUN useradd -u 10000 -m -d /opt/data hermes
 
-WORKDIR /app
-COPY . .
+COPY --chmod=0755 --from=gosu_source /gosu /usr/local/bin/
+COPY --chmod=0755 --from=uv_source /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
-ARG MINI_SWE_AGENT_REPO=https://github.com/SWE-agent/mini-swe-agent
-ARG MINI_SWE_AGENT_REF=07aa6a738556e44b30d7b5c3bbd5063dac871d25
+COPY . /opt/hermes
+WORKDIR /opt/hermes
 
-# Hermes needs the mini-swe-agent submodule contents for terminal execution.
-# Some deploy platforms clone the repo without hydrating submodules, leaving an
-# empty placeholder directory behind. If that happens, fetch the pinned commit.
-RUN if [ ! -f mini-swe-agent/pyproject.toml ]; then \
-        echo "mini-swe-agent submodule missing; cloning pinned fallback" >&2; \
-        rm -rf mini-swe-agent; \
-        git clone "$MINI_SWE_AGENT_REPO" mini-swe-agent; \
-        git -C mini-swe-agent checkout "$MINI_SWE_AGENT_REF"; \
-    fi \
-    && pip install -e ".[messaging,cron,cli,pty,mcp]" \
-    && pip install -e "./mini-swe-agent" \
-    && if [ "$INSTALL_BROWSER_STACK" = "true" ]; then \
-         npm install && npx playwright install --with-deps chromium; \
-       fi \
-    && if [ "$INSTALL_WHATSAPP_BRIDGE" = "true" ]; then \
-         npm --prefix scripts/whatsapp-bridge install; \
-       fi
+# Install Node dependencies and Playwright as root (--with-deps needs apt)
+RUN npm install --prefer-offline --no-audit && \
+    npx playwright install --with-deps chromium --only-shell && \
+    cd /opt/hermes/scripts/whatsapp-bridge && \
+    npm install --prefer-offline --no-audit && \
+    npm cache clean --force
 
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Hand ownership to hermes user, then install Python deps in a virtualenv
+RUN chown -R hermes:hermes /opt/hermes
+USER hermes
 
-ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["hermes", "gateway"]
+RUN uv venv && \
+    uv pip install --no-cache-dir -e ".[all]"
+
+USER root
+RUN chmod +x /opt/hermes/docker/entrypoint.sh
+
+ENV HERMES_HOME=/opt/data
+VOLUME [ "/opt/data" ]
+ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
