@@ -967,6 +967,15 @@ class MatrixAdapter(BasePlatformAdapter):
                     sync_data = await client.sync(since=next_batch, timeout=30000)
                 else:
                     sync_data = await client.sync(timeout=30000)
+                # Some Matrix client implementations surface auth failures as
+                # return objects instead of raising. Stop immediately on
+                # permanent auth errors and retry transient sync failures.
+                sync_msg = getattr(sync_data, "message", None)
+                if isinstance(sync_msg, str):
+                    err_text = sync_msg.lower()
+                    if "m_unknown_token" in err_text or "unknown_token" in err_text:
+                        logger.error("Matrix: permanent auth error: %s — stopping sync", sync_msg)
+                        return
                 try:
                     import nio as _nio  # type: ignore
                 except Exception:

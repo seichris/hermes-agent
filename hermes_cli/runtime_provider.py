@@ -284,7 +284,8 @@ def _get_named_custom_provider(requested_provider: str) -> Optional[Dict[str, An
                 continue
             # Match exact name or normalized name
             name_norm = _normalize_custom_provider_name(ep_name)
-            # Resolve the API key from the env var name stored in key_env
+            # Prefer an explicit inline api_key when present; otherwise fall
+            # back to resolving the secret from the configured env var name.
             key_env = str(entry.get("key_env", "") or "").strip()
             inline_api_key = str(entry.get("api_key", "") or "").strip()
             resolved_api_key = inline_api_key or (os.getenv(key_env, "").strip() if key_env else "")

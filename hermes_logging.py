@@ -84,7 +84,6 @@ def clear_session_context() -> None:
         delattr(_session_context, "session_id")
 
 
-
 # ---------------------------------------------------------------------------
 # Record factory — injects session_tag into every LogRecord at creation
 # ---------------------------------------------------------------------------
@@ -360,6 +359,7 @@ def _add_rotating_handler(
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = _ManagedRotatingFileHandler(
         str(path), maxBytes=max_bytes, backupCount=backup_count,
+        encoding="utf-8",
     )
     handler.setLevel(level)
     handler.setFormatter(formatter)
