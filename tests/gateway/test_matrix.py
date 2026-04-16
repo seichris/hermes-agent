@@ -1394,7 +1394,6 @@ class TestMatrixDisconnect:
         assert adapter._client is None
 
 
-# ---------------------------------------------------------------------------
 # Markdown to HTML: security tests
 # ---------------------------------------------------------------------------
 
@@ -1829,6 +1828,4 @@ class TestMatrixPresence:
         self.adapter._client = None
         result = await self.adapter.set_presence("online")
         assert result is False
-
-
 

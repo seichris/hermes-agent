@@ -446,13 +446,14 @@ def _resolve_gateway_model(config: dict | None = None) -> str:
     back to the hardcoded default which fails when the active provider is
     openai-codex.
     """
+    env_model = os.getenv("HERMES_MODEL", "").strip()
     cfg = config if config is not None else _load_gateway_config()
     model_cfg = cfg.get("model", {})
     if isinstance(model_cfg, str):
-        return model_cfg
+        return model_cfg or env_model
     elif isinstance(model_cfg, dict):
-        return model_cfg.get("default") or model_cfg.get("model") or ""
-    return ""
+        return model_cfg.get("default") or model_cfg.get("model") or env_model
+    return env_model
 
 
 def _resolve_hermes_bin() -> Optional[list[str]]:
@@ -2665,18 +2666,20 @@ class GatewayRunner:
         6. Run agent conversation
         7. Return response
         """
+        if "_running_agents_ts" not in self.__dict__:
+            self._running_agents_ts = {}
+        hooks = getattr(self, "hooks", None)
         source = event.source
 
         # Internal events (e.g. background-process completion notifications)
         # are system-generated and must skip user authorization.
         if getattr(event, "internal", False):
             pass
-        elif source.user_id is None:
-            # Messages with no user identity (Telegram service messages,
-            # channel forwards, anonymous admin actions) cannot be
-            # authorized — drop silently instead of triggering the pairing
-            # flow with a None user_id.
-            logger.debug("Ignoring message with no user_id from %s", source.platform.value)
+        elif source.user_id is None and source.chat_type == "dm":
+            # Direct messages without a sender identity cannot be paired or
+            # authorized safely, so drop them. Group/topic traffic may still
+            # be authorized by chat-level policy and should continue.
+            logger.debug("Ignoring DM with no user_id from %s", source.platform.value)
             return None
         elif not self._is_user_authorized(source):
             logger.warning("Unauthorized user: %s (%s) on %s", source.user_id, source.user_name, source.platform.value)
@@ -2766,7 +2769,7 @@ class GatewayRunner:
             # idle check below would always evaluate to inf >= timeout and
             # immediately evict them, racing with the setup path.
             _stale_idle = float("inf")  # assume idle if we can't check
-            _stale_detail = ""
+            _stale_detail = " | pending startup" if _stale_agent is _AGENT_PENDING_SENTINEL else ""
             if _stale_agent and hasattr(_stale_agent, "get_activity_summary"):
                 try:
                     _sa = _stale_agent.get_activity_summary()
@@ -2933,8 +2936,8 @@ class GatewayRunner:
         # GATEWAY_KNOWN_COMMANDS is derived from the central COMMAND_REGISTRY
         # in hermes_cli/commands.py — no hardcoded set to maintain here.
         from hermes_cli.commands import GATEWAY_KNOWN_COMMANDS, resolve_command as _resolve_cmd
-        if command and command in GATEWAY_KNOWN_COMMANDS:
-            await self.hooks.emit(f"command:{command}", {
+        if command and command in GATEWAY_KNOWN_COMMANDS and hooks and hasattr(hooks, "emit"):
+            await hooks.emit(f"command:{command}", {
                 "platform": source.platform.value if source.platform else "",
                 "user_id": source.user_id,
                 "command": command,
@@ -4430,9 +4433,11 @@ class GatewayRunner:
         The session is preserved so the user can continue the conversation.
         """
         source = event.source
-        session_entry = self.session_store.get_or_create_session(source)
-        session_key = session_entry.session_key
-
+        if hasattr(self, "session_store") and self.session_store is not None:
+            session_entry = self.session_store.get_or_create_session(source)
+            session_key = session_entry.session_key
+        else:
+            session_key = self._session_key_for_source(source)
         agent = self._running_agents.get(session_key)
         if agent is _AGENT_PENDING_SENTINEL:
             # Force-clean the sentinel so the session is unlocked.

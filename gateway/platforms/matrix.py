@@ -25,6 +25,7 @@ Environment variables:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import mimetypes
 import os
@@ -952,22 +953,47 @@ class MatrixAdapter(BasePlatformAdapter):
         """Continuously sync with the homeserver."""
         client = self._client
         # Resume from the token stored during the initial sync.
-        next_batch = await client.sync_store.get_next_batch()
+        next_batch_result = client.sync_store.get_next_batch()
+        next_batch = (
+            await next_batch_result
+            if inspect.isawaitable(next_batch_result)
+            else next_batch_result
+        )
+        if not isinstance(next_batch, str) or not next_batch.strip():
+            next_batch = None
         while not self._closing:
             try:
-                sync_data = await client.sync(
-                    since=next_batch, timeout=30000,
-                )
-
-                # nio returns SyncError objects (not exceptions) for auth
-                # failures like M_UNKNOWN_TOKEN.  Detect and stop immediately.
-                _sync_msg = getattr(sync_data, "message", None)
-                if _sync_msg and isinstance(_sync_msg, str):
-                    _lower = _sync_msg.lower()
-                    if "m_unknown_token" in _lower or "unknown_token" in _lower:
-                        logger.error("Matrix: permanent auth error from sync: %s — stopping", _sync_msg)
+                if next_batch:
+                    sync_data = await client.sync(since=next_batch, timeout=30000)
+                else:
+                    sync_data = await client.sync(timeout=30000)
+                # Some Matrix client implementations surface auth failures as
+                # return objects instead of raising. Stop immediately on
+                # permanent auth errors and retry transient sync failures.
+                sync_msg = getattr(sync_data, "message", None)
+                if isinstance(sync_msg, str):
+                    err_text = sync_msg.lower()
+                    if "m_unknown_token" in err_text or "unknown_token" in err_text:
+                        logger.error("Matrix: permanent auth error: %s — stopping sync", sync_msg)
                         return
-
+                try:
+                    import nio as _nio  # type: ignore
+                except Exception:
+                    _nio = None
+                if _nio is not None and isinstance(sync_data, getattr(_nio, "SyncError", ())):
+                    err_text = str(getattr(sync_data, "message", sync_data)).lower()
+                    if "m_unknown_token" in err_text or "401" in err_text or "403" in err_text:
+                        logger.error(
+                            "Matrix: permanent auth error: %s — stopping sync",
+                            getattr(sync_data, "message", sync_data),
+                        )
+                        return
+                    logger.warning(
+                        "Matrix: sync error: %s — retrying in 5s",
+                        getattr(sync_data, "message", sync_data),
+                    )
+                    await asyncio.sleep(5)
+                    continue
                 if isinstance(sync_data, dict):
                     # Update joined rooms from sync response.
                     rooms_join = sync_data.get("rooms", {}).get("join", {})
@@ -979,7 +1005,9 @@ class MatrixAdapter(BasePlatformAdapter):
                     nb = sync_data.get("next_batch")
                     if nb:
                         next_batch = nb
-                        await client.sync_store.put_next_batch(nb)
+                        put_result = client.sync_store.put_next_batch(nb)
+                        if inspect.isawaitable(put_result):
+                            await put_result
 
                     # Dispatch events to registered handlers so that
                     # _on_room_message / _on_reaction / _on_invite fire.
@@ -991,7 +1019,7 @@ class MatrixAdapter(BasePlatformAdapter):
                         logger.warning("Matrix: sync event dispatch error: %s", exc)
 
                 # Retry any buffered undecrypted events.
-                if self._pending_megolm:
+                if getattr(self, "_pending_megolm", None):
                     await self._retry_pending_decryptions()
 
             except asyncio.CancelledError:
@@ -1633,7 +1661,17 @@ class MatrixAdapter(BasePlatformAdapter):
         is_direct: bool = False,
         preset: str = "private_chat",
     ) -> Optional[str]:
-        """Create a new Matrix room."""
+        """Create a new Matrix room.
+
+        Args:
+            name: Human-readable room name.
+            topic: Room topic.
+            invite: List of user IDs to invite.
+            is_direct: Mark as a DM room.
+            preset: One of private_chat, public_chat, trusted_private_chat.
+
+        Returns the room_id on success, None on failure.
+        """
         if not self._client:
             return None
         try:
@@ -1723,6 +1761,18 @@ class MatrixAdapter(BasePlatformAdapter):
             return SendResult(success=True, message_id=str(event_id))
         except Exception as exc:
             return SendResult(success=False, error=str(exc))
+
+    async def send_emote(
+        self, chat_id: str, text: str, metadata: Optional[Dict[str, Any]] = None,
+    ) -> SendResult:
+        """Send an emote message (/me-style action)."""
+        return await self._send_simple_message(chat_id, text, "m.emote")
+
+    async def send_notice(
+        self, chat_id: str, text: str, metadata: Optional[Dict[str, Any]] = None,
+    ) -> SendResult:
+        """Send a notice message (bot-appropriate, non-alerting)."""
+        return await self._send_simple_message(chat_id, text, "m.notice")
 
     # ------------------------------------------------------------------
     # Helpers

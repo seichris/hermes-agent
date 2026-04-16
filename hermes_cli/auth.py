@@ -784,8 +784,8 @@ def is_provider_explicitly_configured(provider_id: str) -> bool:
 
     # 2. Check config.yaml model.provider
     try:
-        from hermes_cli.config import load_config
-        cfg = load_config()
+        from hermes_cli.config import read_raw_config
+        cfg = read_raw_config()
         model_cfg = cfg.get("model")
         if isinstance(model_cfg, dict):
             cfg_provider = (model_cfg.get("provider") or "").strip().lower()
