@@ -9,6 +9,10 @@ ENV PYTHONUNBUFFERED=1
 # install survives the /opt/data volume overlay at runtime.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright
 
+# Make the installed CLI available to both the entrypoint and ad-hoc
+# container shells opened through deployment platforms like Coolify.
+ENV PATH="/opt/hermes/.venv/bin:${PATH}"
+
 # Install system dependencies in one layer, clear APT cache
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
