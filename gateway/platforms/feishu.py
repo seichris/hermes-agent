@@ -1210,26 +1210,34 @@ class FeishuAdapter(BasePlatformAdapter):
     def _build_event_handler(self) -> Any:
         if EventDispatcherHandler is None:
             return None
-        return (
-            EventDispatcherHandler.builder(
-                self._encrypt_key,
-                self._verification_token,
-            )
-            .register_p2_im_message_message_read_v1(self._on_message_read_event)
-            .register_p2_im_message_receive_v1(self._on_message_event)
-            .register_p2_im_message_reaction_created_v1(
-                lambda data: self._on_reaction_event("im.message.reaction.created_v1", data)
-            )
-            .register_p2_im_message_reaction_deleted_v1(
-                lambda data: self._on_reaction_event("im.message.reaction.deleted_v1", data)
-            )
-            .register_p2_card_action_trigger(self._on_card_action_trigger)
-            .register_p2_im_chat_member_bot_added_v1(self._on_bot_added_to_chat)
-            .register_p2_im_chat_member_bot_deleted_v1(self._on_bot_removed_from_chat)
-            .register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(self._on_p2p_chat_entered)
-            .register_p2_im_message_recalled_v1(self._on_message_recalled)
-            .build()
+        builder = EventDispatcherHandler.builder(
+            self._encrypt_key,
+            self._verification_token,
         )
+        builder = builder.register_p2_im_message_message_read_v1(self._on_message_read_event)
+        builder = builder.register_p2_im_message_receive_v1(self._on_message_event)
+        builder = builder.register_p2_im_message_reaction_created_v1(
+            lambda data: self._on_reaction_event("im.message.reaction.created_v1", data)
+        )
+        builder = builder.register_p2_im_message_reaction_deleted_v1(
+            lambda data: self._on_reaction_event("im.message.reaction.deleted_v1", data)
+        )
+        builder = builder.register_p2_card_action_trigger(self._on_card_action_trigger)
+        # Newer SDKs expose explicit bot-added/bot-removed chat-member hooks.
+        # Older releases omit them, so feature-detect instead of raising.
+        added_cb = getattr(builder, "register_p2_im_chat_member_bot_added_v1", None)
+        if callable(added_cb):
+            builder = added_cb(self._on_bot_added_to_chat)
+        deleted_cb = getattr(builder, "register_p2_im_chat_member_bot_deleted_v1", None)
+        if callable(deleted_cb):
+            builder = deleted_cb(self._on_bot_removed_from_chat)
+        p2p_cb = getattr(builder, "register_p2_im_chat_access_event_bot_p2p_chat_entered_v1", None)
+        if callable(p2p_cb):
+            builder = p2p_cb(self._on_p2p_chat_entered)
+        recalled_cb = getattr(builder, "register_p2_im_message_recalled_v1", None)
+        if callable(recalled_cb):
+            builder = recalled_cb(self._on_message_recalled)
+        return builder.build()
 
     async def connect(self) -> bool:
         """Connect to Feishu/Lark."""

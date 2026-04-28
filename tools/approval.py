@@ -320,14 +320,22 @@ def disable_session_yolo(session_key: str) -> None:
 
 
 def clear_session(session_key: str) -> None:
-    """Remove all approval and yolo state for a given session."""
+    """Clear all approval state associated with one session key.
+
+    Older callers and tests still use this helper directly. Keep it as the
+    compatibility entrypoint for wiping pending approvals, per-session
+    allowlists, and YOLO bypass state.
+    """
     if not session_key:
         return
     with _lock:
+        _pending.pop(session_key, None)
         _session_approved.pop(session_key, None)
         _session_yolo.discard(session_key)
-        _pending.pop(session_key, None)
-        _gateway_queues.pop(session_key, None)
+        _gateway_notify_cbs.pop(session_key, None)
+        entries = _gateway_queues.pop(session_key, [])
+        for entry in entries:
+            entry.event.set()
 
 
 def is_session_yolo_enabled(session_key: str) -> bool:

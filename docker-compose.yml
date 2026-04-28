@@ -1,0 +1,45 @@
+services:
+  hermes:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      HERMES_HOME: /data/hermes
+      MESSAGING_CWD: ${MESSAGING_CWD:-/workspace}
+
+      # LLM provider: set one approach
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+      # Messaging examples: only set what you use
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
+
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      DISCORD_ALLOWED_USERS: ${DISCORD_ALLOWED_USERS:-}
+
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_ALLOWED_USERS: ${SLACK_ALLOWED_USERS:-}
+
+      # Webhook mode: only if you want inbound HTTP
+      WEBHOOK_ENABLED: ${WEBHOOK_ENABLED:-false}
+      WEBHOOK_PORT: ${WEBHOOK_PORT:-8644}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+
+    volumes:
+      - hermes-data:/data/hermes
+      - hermes-workspace:/workspace
+
+    command: ["hermes", "gateway"]
+
+    # Uncomment only if you use webhook mode:
+    # ports:
+    #   - "8644:8644"
+
+volumes:
+  hermes-data:
+  hermes-workspace:
