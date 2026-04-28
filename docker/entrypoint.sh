@@ -68,4 +68,12 @@ if [ -d "$INSTALL_DIR/skills" ]; then
     python3 "$INSTALL_DIR/tools/skills_sync.py"
 fi
 
+# Docker platforms often model ENTRYPOINT as the executable and command as
+# the full shell command.  This image already prepends "hermes", so tolerate
+# deployments configured as command: "hermes gateway" by stripping the
+# duplicated executable name before dispatch.
+if [ "${1:-}" = "hermes" ]; then
+    shift
+fi
+
 exec hermes "$@"

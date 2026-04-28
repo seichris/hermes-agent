@@ -34,7 +34,7 @@ services:
       - hermes-data:/data/hermes
       - hermes-workspace:/workspace
 
-    command: ["hermes", "gateway"]
+    command: ["gateway"]
 
     # Uncomment only if you use webhook mode:
     # ports:
