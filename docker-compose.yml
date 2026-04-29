@@ -1,45 +1,52 @@
+#
+# docker-compose.yml for Hermes Agent
+#
+# Usage:
+#   HERMES_UID=$(id -u) HERMES_GID=$(id -g) docker compose up -d
+#
+# Set HERMES_UID / HERMES_GID to the host user that owns ~/.hermes so
+# files created inside the container stay readable/writable on the host.
+# The entrypoint remaps the internal `hermes` user to these values via
+# usermod/groupmod + gosu.
+#
+# Security notes:
+#   - The dashboard service binds to 127.0.0.1 by default. It stores API
+#     keys; exposing it on LAN without auth is unsafe. If you want remote
+#     access, use an SSH tunnel or put it behind a reverse proxy that
+#     adds authentication — do NOT pass --insecure --host 0.0.0.0.
+#   - The gateway's API server is off unless you uncomment API_SERVER_KEY
+#     and API_SERVER_HOST. See docs/user-guide/api-server.md before doing
+#     this on an internet-facing host.
+#
 services:
-  hermes:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  gateway:
+    build: .
+    image: hermes-agent
+    container_name: hermes
     restart: unless-stopped
-    init: true
-    environment:
-      HERMES_HOME: /data/hermes
-      MESSAGING_CWD: ${MESSAGING_CWD:-/workspace}
-
-      # LLM provider: set one approach
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-
-      # Messaging examples: only set what you use
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
-
-      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
-      DISCORD_ALLOWED_USERS: ${DISCORD_ALLOWED_USERS:-}
-
-      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
-      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
-      SLACK_ALLOWED_USERS: ${SLACK_ALLOWED_USERS:-}
-
-      # Webhook mode: only if you want inbound HTTP
-      WEBHOOK_ENABLED: ${WEBHOOK_ENABLED:-false}
-      WEBHOOK_PORT: ${WEBHOOK_PORT:-8644}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
-
+    network_mode: host
     volumes:
-      - hermes-data:/data/hermes
-      - hermes-workspace:/workspace
+      - ~/.hermes:/opt/data
+    environment:
+      - HERMES_UID=${HERMES_UID:-10000}
+      - HERMES_GID=${HERMES_GID:-10000}
+      # To expose the OpenAI-compatible API server beyond localhost,
+      # uncomment BOTH lines (API_SERVER_KEY is mandatory for auth):
+      # - API_SERVER_HOST=0.0.0.0
+      # - API_SERVER_KEY=${API_SERVER_KEY}
+    command: ["gateway", "run"]
 
-    command: ["gateway"]
-
-    # Uncomment only if you use webhook mode:
-    # ports:
-    #   - "8644:8644"
-
-volumes:
-  hermes-data:
-  hermes-workspace:
+  dashboard:
+    image: hermes-agent
+    container_name: hermes-dashboard
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - gateway
+    volumes:
+      - ~/.hermes:/opt/data
+    environment:
+      - HERMES_UID=${HERMES_UID:-10000}
+      - HERMES_GID=${HERMES_GID:-10000}
+    # Localhost-only. For remote access, tunnel via `ssh -L 9119:localhost:9119`.
+    command: ["dashboard", "--host", "127.0.0.1", "--no-open"]
