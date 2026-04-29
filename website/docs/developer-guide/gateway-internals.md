@@ -20,32 +20,33 @@ The messaging gateway is the long-running process that connects Hermes to 14+ ex
 | `gateway/hooks.py` | Hook discovery, loading, and lifecycle event dispatch |
 | `gateway/mirror.py` | Cross-session message mirroring for `send_message` |
 | `gateway/status.py` | Token lock management for profile-scoped gateway instances |
-| `gateway/builtin_hooks/` | Always-registered hooks (e.g., BOOT.md system prompt hook) |
+| `gateway/builtin_hooks/` | Extension point for always-registered hooks (none shipped) |
 | `gateway/platforms/` | Platform adapters (one per messaging platform) |
 
 ## Architecture Overview
 
-```mermaid
-flowchart TB
-    telegram["Telegram Adapter"]
-    discord["Discord Adapter"]
-    slack["Slack Adapter"]
-    more["Other adapters"]
-    handle["_handle_message()"]
-    slash["Slash command dispatch"]
-    agent["AIAgent creation"]
-    queue["Queue / background sessions"]
-    store["SessionStore<br/>SQLite persistence"]
-
-    telegram --> handle
-    discord --> handle
-    slack --> handle
-    more --> handle
-
-    handle --> slash
-    handle --> agent
-    handle --> queue
-    agent --> store
+```text
+┌─────────────────────────────────────────────────┐
+│                  GatewayRunner                  │
+│                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
+│  │ Telegram │  │ Discord  │  │  Slack   │       │
+│  │ Adapter  │  │ Adapter  │  │ Adapter  │       │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘       │
+│       │             │             │             │
+│       └─────────────┼─────────────┘             │
+│                     ▼                           │
+│              _handle_message()                  │
+│                     │                           │
+│         ┌───────────┼───────────┐               │
+│         ▼           ▼           ▼               │
+│  Slash command   AIAgent    Queue/BG            │
+│    dispatch      creation   sessions            │
+│                     │                           │
+│                     ▼                           │
+│                 SessionStore                    │
+│              (SQLite persistence)               │
+└───────┴─────────────┴─────────────┴─────────────┘
 ```
 
 ## Message Flow
