@@ -4,6 +4,7 @@ FROM debian:13.4
 
 # Disable Python stdout buffering to ensure logs are printed immediately
 ENV PYTHONUNBUFFERED=1
+ARG HERMES_BROWSER_TOOLS=1
 
 # Store Playwright browsers outside the volume mount so the build-time
 # install survives the /opt/data volume overlay at runtime.
@@ -49,8 +50,10 @@ COPY ui-tui/packages/hermes-ink/ ui-tui/packages/hermes-ink/
 # fails with EACCES (node_modules/ is root-owned from build time).
 ENV npm_config_install_links=false
 
-RUN npm install --prefer-offline --no-audit && \
-    npx playwright install --with-deps chromium --only-shell && \
+RUN if [ "$HERMES_BROWSER_TOOLS" = "1" ]; then \
+        npm install --prefer-offline --no-audit && \
+        npx playwright install --with-deps chromium --only-shell; \
+    fi && \
     (cd web && npm install --prefer-offline --no-audit) && \
     (cd ui-tui && npm install --prefer-offline --no-audit) && \
     npm cache clean --force

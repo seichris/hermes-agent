@@ -13,7 +13,7 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/seichris/hermes-agent
-  SOURCE_REF: upstream-clean
+  SOURCE_REF: prebuilt-image
 
 jobs:
   build:
@@ -43,6 +43,9 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:upstream-clean
+            ${{ env.IMAGE_NAME }}:prebuilt-image
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: |
+            HERMES_BROWSER_TOOLS=0
           cache-from: type=gha
           cache-to: type=gha,mode=max

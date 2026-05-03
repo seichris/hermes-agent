@@ -20,7 +20,7 @@
 #
 services:
   gateway:
-    image: ${HERMES_IMAGE:-ghcr.io/seichris/hermes-agent:upstream-clean}
+    image: ${HERMES_IMAGE:-ghcr.io/seichris/hermes-agent:prebuilt-image}
     container_name: hermes
     restart: unless-stopped
     network_mode: host
@@ -43,7 +43,7 @@ services:
     command: ["gateway", "run"]
 
   dashboard:
-    image: ${HERMES_IMAGE:-ghcr.io/seichris/hermes-agent:upstream-clean}
+    image: ${HERMES_IMAGE:-ghcr.io/seichris/hermes-agent:prebuilt-image}
     container_name: hermes-dashboard
     restart: unless-stopped
     network_mode: host
