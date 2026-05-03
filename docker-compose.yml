@@ -24,6 +24,10 @@ services:
     container_name: hermes
     restart: unless-stopped
     network_mode: host
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     volumes:
       - ~/.hermes:/opt/data
     environment:
@@ -47,6 +51,10 @@ services:
     container_name: hermes-dashboard
     restart: unless-stopped
     network_mode: host
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     depends_on:
       - gateway
     volumes:
