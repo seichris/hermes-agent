@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from hermes_constants import is_container
 from utils import atomic_replace
 
 
@@ -147,7 +148,11 @@ def load_hermes_dotenv(
     """Load Hermes environment files with user config taking precedence.
 
     Behavior:
-    - `~/.hermes/.env` overrides stale shell-exported values when present.
+    - `~/.hermes/.env` overrides stale shell-exported values when present on
+      local installs.
+    - In containers, orchestrator-provided runtime env wins over the mounted
+      Hermes `.env` so Compose/Coolify/Kubernetes secrets are not shadowed by
+      stale persisted setup values.
     - project `.env` acts as a dev fallback and only fills missing values when
       the user env exists.
     - if no user env exists, the project `.env` also overrides stale shell vars.
@@ -164,8 +169,12 @@ def load_hermes_dotenv(
     if project_env_path and project_env_path.exists():
         _sanitize_env_file_if_needed(project_env_path)
 
+    runtime_env_wins = is_container() or os.getenv(
+        "HERMES_RUNTIME_ENV_PRECEDENCE", ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
+
     if user_env.exists():
-        _load_dotenv_with_fallback(user_env, override=True)
+        _load_dotenv_with_fallback(user_env, override=not runtime_env_wins)
         loaded.append(user_env)
 
     if project_env_path and project_env_path.exists():

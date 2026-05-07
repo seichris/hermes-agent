@@ -27,29 +27,14 @@ services:
       nofile:
         soft: 65535
         hard: 65535
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - ~/.hermes:/opt/data
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - NOUS_API_KEY=${NOUS_API_KEY:-}
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
-      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
-      - SLACK_ALLOWED_USERS=${SLACK_ALLOWED_USERS:-}
-      - SLACK_ALLOW_ALL_USERS=${SLACK_ALLOW_ALL_USERS:-}
-      - SLACK_HOME_CHANNEL=${SLACK_HOME_CHANNEL:-}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS:-}
-      - TELEGRAM_GROUP_ALLOWED_USERS=${TELEGRAM_GROUP_ALLOWED_USERS:-}
-      - TELEGRAM_GROUP_ALLOWED_CHATS=${TELEGRAM_GROUP_ALLOWED_CHATS:-}
-      - TELEGRAM_ALLOW_ALL_USERS=${TELEGRAM_ALLOW_ALL_USERS:-}
-      - TELEGRAM_HOME_CHAT_ID=${TELEGRAM_HOME_CHAT_ID:-}
-      - GATEWAY_ALLOWED_USERS=${GATEWAY_ALLOWED_USERS:-}
-      - GATEWAY_ALLOW_ALL_USERS=${GATEWAY_ALLOW_ALL_USERS:-}
-      - API_SERVER_KEY=${API_SERVER_KEY:-}
-      - API_SERVER_HOST=${API_SERVER_HOST:-}
       # To expose the OpenAI-compatible API server beyond localhost,
       # uncomment BOTH lines (API_SERVER_KEY is mandatory for auth):
       # - API_SERVER_HOST=0.0.0.0
@@ -72,6 +57,9 @@ services:
       nofile:
         soft: 65535
         hard: 65535
+    env_file:
+      - path: .env
+        required: false
     depends_on:
       - gateway
     volumes:
@@ -79,23 +67,5 @@ services:
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - NOUS_API_KEY=${NOUS_API_KEY:-}
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
-      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
-      - SLACK_ALLOWED_USERS=${SLACK_ALLOWED_USERS:-}
-      - SLACK_ALLOW_ALL_USERS=${SLACK_ALLOW_ALL_USERS:-}
-      - SLACK_HOME_CHANNEL=${SLACK_HOME_CHANNEL:-}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS:-}
-      - TELEGRAM_GROUP_ALLOWED_USERS=${TELEGRAM_GROUP_ALLOWED_USERS:-}
-      - TELEGRAM_GROUP_ALLOWED_CHATS=${TELEGRAM_GROUP_ALLOWED_CHATS:-}
-      - TELEGRAM_ALLOW_ALL_USERS=${TELEGRAM_ALLOW_ALL_USERS:-}
-      - TELEGRAM_HOME_CHAT_ID=${TELEGRAM_HOME_CHAT_ID:-}
-      - GATEWAY_ALLOWED_USERS=${GATEWAY_ALLOWED_USERS:-}
-      - GATEWAY_ALLOW_ALL_USERS=${GATEWAY_ALLOW_ALL_USERS:-}
-      - API_SERVER_KEY=${API_SERVER_KEY:-}
-      - API_SERVER_HOST=${API_SERVER_HOST:-}
       - GATEWAY_HEALTH_URL=${GATEWAY_HEALTH_URL:-http://127.0.0.1:8642}
     command: ["dashboard", "--host", "0.0.0.0", "--no-open", "--insecure"]

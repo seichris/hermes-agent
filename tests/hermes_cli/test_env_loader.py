@@ -20,6 +20,21 @@ def test_user_env_overrides_stale_shell_values(tmp_path, monkeypatch):
     assert os.getenv("OPENAI_BASE_URL") == "https://new.example/v1"
 
 
+def test_container_runtime_env_overrides_user_env(tmp_path, monkeypatch):
+    home = tmp_path / "hermes"
+    home.mkdir()
+    env_file = home / ".env"
+    env_file.write_text("FAST_MISSION_CONTROL_API_KEY=stale-file-key\n", encoding="utf-8")
+
+    monkeypatch.setenv("FAST_MISSION_CONTROL_API_KEY", "runtime-key")
+    monkeypatch.setattr("hermes_cli.env_loader.is_container", lambda: True)
+
+    loaded = load_hermes_dotenv(hermes_home=home)
+
+    assert loaded == [env_file]
+    assert os.getenv("FAST_MISSION_CONTROL_API_KEY") == "runtime-key"
+
+
 def test_project_env_overrides_stale_shell_values_when_user_env_missing(tmp_path, monkeypatch):
     home = tmp_path / "hermes"
     project_env = tmp_path / ".env"
