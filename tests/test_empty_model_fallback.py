@@ -14,12 +14,12 @@ class TestGetDefaultModelForProvider:
         assert result
         assert isinstance(result, str)
 
-    def test_openrouter_returns_empty(self):
-        """OpenRouter uses dynamic model fetch, no static catalog entry."""
+    def test_openrouter_returns_snapshot_default(self):
+        """OpenRouter uses the static snapshot when no explicit model is configured."""
         from hermes_cli.models import get_default_model_for_provider
-        # OpenRouter is not in _PROVIDER_MODELS — it uses live fetching
         result = get_default_model_for_provider("openrouter")
-        assert result == ""
+        assert result
+        assert isinstance(result, str)
 
     def test_unknown_provider_returns_empty(self):
         from hermes_cli.models import get_default_model_for_provider
@@ -94,6 +94,25 @@ class TestGatewayEmptyModelFallback:
 
         # Can't fill in a default without knowing the provider
         assert model == ""
+
+    def test_empty_model_filled_for_openrouter(self):
+        """OpenRouter must not send an empty model when config lacks model.default."""
+        from gateway.run import GatewayRunner
+
+        runner = object.__new__(GatewayRunner)
+        runner._session_model_overrides = {}
+
+        with patch("gateway.run._resolve_gateway_model", return_value=""), \
+             patch("gateway.run._resolve_runtime_agent_kwargs", return_value={
+                 "provider": "openrouter",
+                 "api_key": "test-key",
+                 "base_url": "https://openrouter.ai/api/v1",
+                 "api_mode": "chat_completions",
+             }):
+            model, kwargs = runner._resolve_session_agent_runtime()
+
+        assert model, "OpenRouter fallback model should not be empty"
+        assert kwargs["provider"] == "openrouter"
 
 
 class TestResolveGatewayModel:
