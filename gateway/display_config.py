@@ -35,6 +35,12 @@ _GLOBAL_DEFAULTS: dict[str, Any] = {
     "show_reasoning": False,
     "tool_preview_length": 0,
     "streaming": None,  # None = follow top-level streaming config
+    # When true, delete tool-progress / "Still working..." / status bubbles
+    # after the final response lands on platforms that support message
+    # deletion (e.g. Telegram). Off by default — progress is still shown
+    # live, just cleaned up after success so the chat doesn't fill up with
+    # stale breadcrumbs. Failed runs leave bubbles in place as breadcrumbs.
+    "cleanup_progress": False,
 }
 
 # ---------------------------------------------------------------------------
@@ -75,7 +81,7 @@ _TIER_MINIMAL = {
 
 _PLATFORM_DEFAULTS: dict[str, dict[str, Any]] = {
     # Tier 1 — full edit support, personal/team use
-    "telegram":    _TIER_HIGH,
+    "telegram":    {**_TIER_HIGH, "tool_progress": "new"},
     "discord":     _TIER_HIGH,
 
     # Tier 2 — edit support, often customer/workspace channels
@@ -172,6 +178,20 @@ def resolve_display_setting(
     return fallback
 
 
+def get_platform_defaults(platform_key: str) -> dict[str, Any]:
+    """Return a copy of the built-in defaults for one platform."""
+    defaults = _PLATFORM_DEFAULTS.get(platform_key) or {}
+    return dict(defaults)
+
+
+def get_effective_display(user_config: dict, platform_key: str) -> dict[str, Any]:
+    """Resolve all overrideable display settings for a platform."""
+    return {
+        key: resolve_display_setting(user_config, platform_key, key)
+        for key in OVERRIDEABLE_KEYS
+    }
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -184,9 +204,13 @@ def _normalise(setting: str, value: Any) -> Any:
         if value is True:
             return "all"
         return str(value).lower()
-    if setting in ("show_reasoning", "streaming"):
+    if setting in {"show_reasoning", "streaming"}:
         if isinstance(value, str):
-            return value.lower() in ("true", "1", "yes", "on")
+            return value.lower() in {"true", "1", "yes", "on"}
+        return bool(value)
+    if setting == "cleanup_progress":
+        if isinstance(value, str):
+            return value.lower() in {"true", "1", "yes", "on"}
         return bool(value)
     if setting == "tool_preview_length":
         try:

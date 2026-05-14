@@ -10,6 +10,10 @@ ARG HERMES_BROWSER_TOOLS=1
 # install survives the /opt/data volume overlay at runtime.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright
 
+# Make the installed CLI available to both the entrypoint and ad-hoc
+# container shells opened through deployment platforms like Coolify.
+ENV PATH="/opt/hermes/.venv/bin:${PATH}"
+
 # Install system dependencies in one layer, clear APT cache
 # tini reaps orphaned zombie processes (MCP stdio subprocesses, git, bun, etc.)
 # that would otherwise accumulate when hermes runs as PID 1. See #15012.
@@ -58,6 +62,29 @@ RUN if [ "$HERMES_BROWSER_TOOLS" = "1" ]; then \
     (cd ui-tui && npm install --prefer-offline --no-audit) && \
     npm cache clean --force
 
+# ---------- Layer-cached Python dependency install ----------
+# Copy only pyproject.toml + uv.lock so the Python dep resolve + wheel
+# download + native-extension compile layer is cached unless those inputs
+# change.  Before this split the Python install sat after `COPY . .`, so
+# every source-only commit re-did ~4-5 min of dep work on cold builds.
+#
+# README.md is referenced by pyproject.toml's `readme =` field, but it's
+# excluded from the build context by .dockerignore's `*.md`.  uv's build
+# frontend stats the readme path during dep resolution, so we `touch` an
+# empty placeholder — the real README is restored by `COPY . .` below.
+#
+# `uv sync --frozen --no-install-project --extra all` installs only the
+# deps reachable through the composite `[all]` extra (handpicked set
+# intended for the production image).  We do NOT use `--all-extras`:
+# that would pull in `[rl]` (atroposlib + tinker + torch + wandb from
+# git), `[yc-bench]` (another git dep), and `[termux-all]` (Android
+# redundancy), none of which belong in the published container.
+#
+# The editable link is created after the source copy below.
+COPY pyproject.toml uv.lock ./
+RUN touch ./README.md
+RUN uv sync --frozen --no-install-project --extra all
+
 # ---------- Source code ----------
 # .dockerignore excludes node_modules, so the installs above survive.
 COPY --chown=hermes:hermes . .
@@ -69,14 +96,25 @@ RUN cd web && npm run build && \
 # ---------- Permissions ----------
 # Make install dir world-readable so any HERMES_UID can read it at runtime.
 # The venv needs to be traversable too.
+# node_modules trees additionally need to be writable by the hermes user
+# so the runtime `npm install` triggered by _tui_need_npm_install() in
+# hermes_cli/main.py succeeds (see #18800). /opt/hermes/web is build-time
+# only (HERMES_WEB_DIST points at hermes_cli/web_dist) and is intentionally
+# not chowned here.
+# The .venv MUST be hermes-writable so lazy_deps.py can install platform
+# packages (discord.py, telegram, slack, etc.) at first gateway boot.
+# Without this, `uv pip install` fails with EACCES and all messaging
+# adapters silently fail to load.  See tools/lazy_deps.py.
 USER root
-RUN chmod -R a+rX /opt/hermes
+RUN chmod -R a+rX /opt/hermes && \
+    chown -R hermes:hermes /opt/hermes/.venv /opt/hermes/ui-tui /opt/hermes/node_modules
 # Start as root so the entrypoint can usermod/groupmod + gosu.
 # If HERMES_UID is unset, the entrypoint drops to the default hermes user (10000).
 
-# ---------- Python virtualenv ----------
-RUN uv venv && \
-    uv pip install --no-cache-dir -e ".[all]"
+# ---------- Link hermes-agent itself (editable) ----------
+# Deps are already installed in the cached layer above; `--no-deps` makes
+# this a fast (~1s) egg-link creation with no resolution or downloads.
+RUN uv pip install --no-cache-dir --no-deps -e "."
 
 # ---------- Runtime ----------
 ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
